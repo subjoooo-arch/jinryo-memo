@@ -24,6 +24,7 @@ export default function App() {
   const [dict, setDict] = useState(false), [hist, setHist] = useState<Rec[]>([])
   const mr = useRef<MediaRecorder | null>(null), timer = useRef<number>(0), sr = useRef<any>(null), id = useRef(Date.now())
   const hasKey = !!cfg.key.trim()
+  const canRec = !!((navigator as any).mediaDevices?.getUserMedia && (window as any).MediaRecorder)
   const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
 
   useEffect(() => { localStorage.setItem(LS, JSON.stringify(cfg)) }, [cfg])
@@ -99,7 +100,9 @@ export default function App() {
         </div>
         {blob && <div className="row"><audio controls src={URL.createObjectURL(blob.b)} />
           <button className="big pri" disabled={!!busy} onClick={transcribe}>📝 받아쓰기 {hasKey ? (isXai(cfg) ? '(Grok STT)' : '(API)') : '(기기 내)'}</button></div>}
-        {!hasKey && SR && <div className="row"><button className={'big ghost' + (dict ? ' live' : '')} onClick={toggleDict}>{dict ? '■ 실시간 받아쓰기 중지' : '🎙 실시간 받아쓰기 (브라우저)'}</button></div>}
+        <div className="row"><button className={'big ghost' + (dict ? ' live' : '')} disabled={!SR} onClick={toggleDict}>{dict ? '■ 실시간 받아쓰기 중지' : '🎙 실시간 받아쓰기 (브라우저)'}</button></div>
+        {!SR && <p className="tip">⚠️ 이 브라우저는 실시간 받아쓰기를 지원하지 않아요. Chrome에서 열어 주세요. (녹음 시작 → 받아쓰기는 그대로 사용할 수 있어요)</p>}
+        {!canRec && <p className="tip">⚠️ 이 브라우저는 녹음을 지원하지 않아요. 최신 Chrome 또는 삼성 인터넷에서 열거나 파일 올리기를 이용해 주세요.</p>}
         {!window.isSecureContext && <p className="tip">💡 마이크는 HTTPS 주소에서만 동작합니다.</p>}
       </section>
       <section className="card">
