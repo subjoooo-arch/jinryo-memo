@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiMemo, apiTranscribe, ruleDraft, Cfg } from './ai'
+import { apiMemo, apiTranscribe, ruleDraft, Cfg, isXai } from './ai'
 import { allRecs, delRec, Rec, saveRec } from './db'
 import { localTranscribe, toPcm16k } from './local'
 
@@ -98,14 +98,14 @@ export default function App() {
           <button className="big ghost" onClick={reset}>↺ 새 상담</button>
         </div>
         {blob && <div className="row"><audio controls src={URL.createObjectURL(blob.b)} />
-          <button className="big pri" disabled={!!busy} onClick={transcribe}>📝 받아쓰기 {hasKey ? '(API)' : '(기기 내)'}</button></div>}
+          <button className="big pri" disabled={!!busy} onClick={transcribe}>📝 받아쓰기 {hasKey ? (isXai(cfg) ? '(Grok STT)' : '(API)') : '(기기 내)'}</button></div>}
         {!hasKey && SR && <div className="row"><button className={'big ghost' + (dict ? ' live' : '')} onClick={toggleDict}>{dict ? '■ 실시간 받아쓰기 중지' : '🎙 실시간 받아쓰기 (브라우저)'}</button></div>}
         {!window.isSecureContext && <p className="tip">💡 마이크는 HTTPS 주소에서만 동작합니다.</p>}
       </section>
       <section className="card">
         <div className="hd"><h2>2. 대화 내용</h2><button className="cp" onClick={() => cp(tr, '대화 내용')}>📋 복사</button></div>
         <textarea value={tr} onChange={e => setTr(e.target.value)} placeholder="받아쓰기 결과가 여기에 표시됩니다. 직접 입력·수정도 가능합니다." rows={8} />
-        <button className="big pri wide" disabled={!!busy} onClick={genMemo}>✨ 진료메모 만들기 {hasKey ? '' : '(규칙 기반 초안)'}</button>
+        <button className="big pri wide" disabled={!!busy} onClick={genMemo}>✨ 진료메모 만들기 {hasKey ? `(AI · ${cfg.chatModel || '기본 모델'})` : '(규칙 기반 초안 · API 키 없음)'}</button>
       </section>
       <section className="card">
         <div className="hd"><h2>3. 진료메모</h2><button className="cp" onClick={() => cp(memo, '진료메모')}>📋 복사</button></div>
@@ -123,7 +123,12 @@ export default function App() {
         <pre>{(h.memo || h.transcript).slice(0, 300)}</pre></section>)}</main>}
 
     {tab === 'set' && <main><section className="card">
-      <h2>API 설정 (OpenAI 호환)</h2>
+      <h2>API 설정</h2>
+      <div className="row">
+        <button className={'big ' + (!isXai(cfg) ? 'pri' : 'ghost')} onClick={() => setCfg({ ...cfg, provider: 'openai', base: 'https://api.openai.com/v1', sttModel: 'whisper-1', chatModel: 'gpt-4o-mini' })}>OpenAI</button>
+        <button className={'big ' + (isXai(cfg) ? 'pri' : 'ghost')} onClick={() => setCfg({ ...cfg, provider: 'xai', base: 'https://api.x.ai/v1', sttModel: 'grok-voice-transcribe-2.0', chatModel: 'grok-4.7' })}>Grok (xAI)</button>
+      </div>
+      {isXai(cfg) && <p className="tip">Grok: 메모는 grok-4.7(chat/completions), 받아쓰기는 xAI 음성인식(/v1/stt, grok-voice-transcribe-2.0, 한국어)으로 처리합니다. API 키는 console.x.ai 에서 발급하세요.</p>}
       <p className="tip">키는 이 기기의 브라우저(localStorage)에만 저장되며 설정한 서버 외에는 전송되지 않습니다. 키가 없으면 기기 내 Whisper + 규칙 기반 초안으로 동작합니다.</p>
       {([['key', 'API 키', 'sk-...'], ['base', 'Base URL', 'https://api.openai.com/v1'], ['sttModel', '받아쓰기 모델', 'whisper-1'], ['chatModel', '메모 생성 모델', 'gpt-4o-mini']] as const).map(([k, l, p]) =>
         <label className="fld" key={k}>{l}<input type={k === 'key' ? 'password' : 'text'} value={(cfg as any)[k]} placeholder={p} onChange={e => setCfg({ ...cfg, [k]: e.target.value })} /></label>)}

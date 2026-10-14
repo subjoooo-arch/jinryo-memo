@@ -21,7 +21,8 @@ ${DISCLAIMER}
 - 금액, 기간, 횟수 등 숫자는 대화 그대로 옮긴다.
 - 섹션 사이에 빈 줄 하나.`
 
-export interface Cfg { key: string; base: string; sttModel: string; chatModel: string }
+export interface Cfg { key: string; base: string; sttModel: string; chatModel: string; provider?: 'openai' | 'xai' }
+export const isXai = (c: Cfg) => c.provider === 'xai' || /api\.x\.ai/.test(c.base)
 const url = (c: Cfg, p: string) => c.base.replace(/\/+$/, '') + p
 async function err(r: Response) {
   let t = ''; try { t = await r.text() } catch {}
@@ -31,11 +32,17 @@ async function err(r: Response) {
   return new Error(`서버 오류 ${r.status}: ${t.slice(0, 200)}`)
 }
 export async function apiTranscribe(c: Cfg, blob: Blob, name: string) {
-  const f = new FormData()
-  f.append('file', blob, name); f.append('model', c.sttModel || 'whisper-1'); f.append('language', 'ko')
-  f.append('prompt', '치과 상담 대화입니다. 크라운, 신경치료, 임플란트, 발치, 치아 균열, 치수염, 레진, 스케일링, 교합.')
+  const f = new FormData(), x = isXai(c)
+  if (x) {
+    f.append('model', c.sttModel || 'grok-voice-transcribe-2.0'); f.append('language', 'ko')
+    for (const k of ['크라운', '신경치료', '임플란트', '치아 균열', '치수염', '레진', '스케일링']) f.append('keyterm', k)
+    f.append('file', blob, name) // xAI: file 필드는 반드시 마지막
+  } else {
+    f.append('file', blob, name); f.append('model', c.sttModel || 'whisper-1'); f.append('language', 'ko')
+    f.append('prompt', '치과 상담 대화입니다. 크라운, 신경치료, 임플란트, 발치, 치아 균열, 치수염, 레진, 스케일링, 교합.')
+  }
   let r: Response
-  try { r = await fetch(url(c, '/audio/transcriptions'), { method: 'POST', headers: { Authorization: `Bearer ${c.key}` }, body: f }) }
+  try { r = await fetch(url(c, x ? '/stt' : '/audio/transcriptions'), { method: 'POST', headers: { Authorization: `Bearer ${c.key}` }, body: f }) }
   catch { throw new Error('네트워크 오류: 인터넷 연결 또는 Base URL을 확인하세요.') }
   if (!r.ok) throw await err(r)
   return ((await r.json()).text as string || '').trim()
@@ -45,7 +52,7 @@ export async function apiMemo(c: Cfg, transcript: string, extra: string) {
   try {
     r = await fetch(url(c, '/chat/completions'), {
       method: 'POST', headers: { Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: c.chatModel || 'gpt-4o-mini', temperature: 0.2, messages: [
+      body: JSON.stringify({ model: c.chatModel || 'gpt-4o-mini', ...(isXai(c) ? {} : { temperature: 0.2 }), messages: [
         { role: 'system', content: SYSTEM_PROMPT + (extra.trim() ? '\n\n추가 지시:\n' + extra : '') },
         { role: 'user', content: '다음 상담 녹취록으로 진료메모를 작성해줘:\n\n' + transcript }] })
     })
