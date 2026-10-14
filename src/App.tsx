@@ -21,6 +21,7 @@ export default function App() {
   const [blob, setBlob] = useState<{ b: Blob; name: string } | null>(null)
   const [tr, setTr] = useState(''), [memo, setMemo] = useState('')
   const [busy, setBusy] = useState(''), [msg, setMsg] = useState(''), [toast, setToast] = useState('')
+  const [memoErr, setMemoErr] = useState(''), [el, setEl] = useState(0), ab = useRef<AbortController | null>(null)
   const [dict, setDict] = useState(false), [hist, setHist] = useState<Rec[]>([])
   const mr = useRef<MediaRecorder | null>(null), timer = useRef<number>(0), sr = useRef<any>(null), id = useRef(Date.now())
   const hasKey = !!cfg.key.trim()
@@ -73,10 +74,16 @@ export default function App() {
   }
   const dictRef = useRef(false); dictRef.current = dict
   async function genMemo() {
-    if (!tr.trim()) return setMsg('⚠️ 먼저 대화 내용(녹취록)이 필요합니다.')
-    setMsg('')
-    if (!hasKey) { setMemo(ruleDraft(tr)); flash('규칙 기반 초안 생성 (키 없음)'); return }
-    try { setBusy('진료메모 작성 중…'); setMemo(await apiMemo(cfg, tr, cfg.extra)); setBusy('') } catch (e) { fail(e) }
+    setMemoErr(''); setMsg('')
+    if (!tr.trim()) return setMemoErr('⚠️ 대화 내용이 비어 있습니다. 먼저 녹음 → 받아쓰기를 하거나 직접 입력해 주세요.')
+    if (!hasKey) { setMemo(ruleDraft(tr)); flash('규칙 기반 초안 생성 완료 (API 키 없음)'); return }
+    const c = new AbortController(); ab.current = c
+    const to = setTimeout(() => c.abort('timeout'), 90000), t0 = Date.now(); setEl(0)
+    const iv = setInterval(() => setEl(Math.floor((Date.now() - t0) / 1000)), 1000)
+    setBusy(`진료메모 생성 중… (${cfg.chatModel})`)
+    try { setMemo(await apiMemo(cfg, tr, cfg.extra, c.signal)); flash('진료메모 생성 완료 ✓') }
+    catch (e: any) { setMemoErr('⚠️ ' + (e?.message || String(e))) }
+    finally { clearTimeout(to); clearInterval(iv); setBusy(''); ab.current = null }
   }
   const cp = async (t: string, n: string) => flash((t && await copyText(t)) ? `${n} 복사됨 ✓` : '복사 실패 — 길게 눌러 직접 복사하세요')
   const reset = () => { setBlob(null); setTr(''); setMemo(''); setMsg(''); id.current = Date.now() }
@@ -108,6 +115,8 @@ export default function App() {
       <section className="card">
         <div className="hd"><h2>2. 대화 내용</h2><button className="cp" onClick={() => cp(tr, '대화 내용')}>📋 복사</button></div>
         <textarea value={tr} onChange={e => setTr(e.target.value)} placeholder="받아쓰기 결과가 여기에 표시됩니다. 직접 입력·수정도 가능합니다." rows={8} />
+        {busy.startsWith('진료메모') ? <div className="busy"><span className="spin" />{busy} {el}초<button className="cp" onClick={() => ab.current?.abort('cancel')}>취소</button></div> : null}
+        {memoErr && <div className="msg" onClick={() => setMemoErr('')}>{memoErr}</div>}
         <button className="big pri wide" disabled={!!busy} onClick={genMemo}>✨ 진료메모 만들기 {hasKey ? `(AI · ${cfg.chatModel || '기본 모델'})` : '(규칙 기반 초안 · API 키 없음)'}</button>
       </section>
       <section className="card">
@@ -130,8 +139,9 @@ export default function App() {
       <div className="row">
         <button className={'big ' + (!isXai(cfg) ? 'pri' : 'ghost')} onClick={() => setCfg({ ...cfg, provider: 'openai', base: 'https://api.openai.com/v1', sttModel: 'whisper-1', chatModel: 'gpt-4o-mini' })}>OpenAI</button>
         <button className={'big ' + (isXai(cfg) ? 'pri' : 'ghost')} onClick={() => setCfg({ ...cfg, provider: 'xai', base: 'https://api.x.ai/v1', sttModel: 'grok-voice-transcribe-2.0', chatModel: 'grok-4.7' })}>Grok (xAI)</button>
+        {isXai(cfg) && <button className="big ghost" onClick={() => setCfg({ ...cfg, chatModel: 'grok-4.20-0309-non-reasoning' })}>⚡ Grok 빠른 모델</button>}
       </div>
-      {isXai(cfg) && <p className="tip">Grok: 메모는 grok-4.7(chat/completions), 받아쓰기는 xAI 음성인식(/v1/stt, grok-voice-transcribe-2.0, 한국어)으로 처리합니다. API 키는 console.x.ai 에서 발급하세요.</p>}
+      {isXai(cfg) && <p className="tip">Grok: 메모는 grok-4.7(chat/completions), 받아쓰기는 xAI 음성인식(/v1/stt, grok-voice-transcribe-2.0, 한국어)으로 처리합니다. grok-4.7은 추론 모델이라 수십 초 걸릴 수 있어 reasoning_effort=low로 요청합니다. 더 빠르게 하려면 ⚡ 빠른 모델(grok-4.20-0309-non-reasoning)을 선택하세요. API 키는 console.x.ai 에서 발급하세요.</p>}
       <p className="tip">키는 이 기기의 브라우저(localStorage)에만 저장되며 설정한 서버 외에는 전송되지 않습니다. 키가 없으면 기기 내 Whisper + 규칙 기반 초안으로 동작합니다.</p>
       {([['key', 'API 키', 'sk-...'], ['base', 'Base URL', 'https://api.openai.com/v1'], ['sttModel', '받아쓰기 모델', 'whisper-1'], ['chatModel', '메모 생성 모델', 'gpt-4o-mini']] as const).map(([k, l, p]) =>
         <label className="fld" key={k}>{l}<input type={k === 'key' ? 'password' : 'text'} value={(cfg as any)[k]} placeholder={p} onChange={e => setCfg({ ...cfg, [k]: e.target.value })} /></label>)}

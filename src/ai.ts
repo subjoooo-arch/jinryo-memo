@@ -25,13 +25,16 @@ export interface Cfg { key: string; base: string; sttModel: string; chatModel: s
 export const isXai = (c: Cfg) => c.provider === 'xai' || /api\.x\.ai/.test(c.base)
 const url = (c: Cfg, p: string) => c.base.replace(/\/+$/, '') + p
 async function err(r: Response) {
-  let t = ''; try { t = await r.text() } catch {}
-  if (r.status === 401) return new Error('API 키가 올바르지 않습니다 (401).')
-  if (r.status === 429) return new Error('요청 한도 초과 또는 크레딧 부족입니다 (429).')
-  if (r.status === 413) return new Error('파일이 너무 큽니다 (25MB 이하로 올려주세요).')
-  return new Error(`서버 오류 ${r.status}: ${t.slice(0, 200)}`)
+  let t = '', m = ''
+  try { t = await r.text(); const j = JSON.parse(t); m = typeof j.error === 'string' ? j.error : (j.error?.message || j.message || '') } catch {}
+  m = (m || t || r.statusText).slice(0, 300)
+  const hint = r.status === 401 || /api key/i.test(m) ? 'API 키가 올바르지 않습니다. ' : r.status === 429 ? '요청 한도 초과 또는 크레딧 부족입니다. '
+    : r.status === 413 ? '파일이 너무 큽니다. ' : r.status === 404 || /model/i.test(m) ? '모델 이름 또는 Base URL을 확인하세요. ' : ''
+  return new Error(`${hint}(HTTP ${r.status}) ${m}`)
 }
-export async function apiTranscribe(c: Cfg, blob: Blob, name: string) {
+const netErr = (e: any, sig?: AbortSignal) => sig?.aborted ? new Error(sig.reason === 'timeout' ? '시간 초과(90초): 서버 응답이 없습니다. 다시 시도하거나 더 빠른 모델로 바꿔 보세요.' : '취소했습니다.')
+  : new Error('네트워크 오류: 인터넷 연결, Base URL, 또는 브라우저 차단(CORS)을 확인하세요. ' + (e?.message || ''))
+export async function apiTranscribe(c: Cfg, blob: Blob, name: string, signal?: AbortSignal) {
   const f = new FormData(), x = isXai(c)
   if (x) {
     f.append('model', c.sttModel || 'grok-voice-transcribe-2.0'); f.append('language', 'ko')
@@ -42,23 +45,26 @@ export async function apiTranscribe(c: Cfg, blob: Blob, name: string) {
     f.append('prompt', '치과 상담 대화입니다. 크라운, 신경치료, 임플란트, 발치, 치아 균열, 치수염, 레진, 스케일링, 교합.')
   }
   let r: Response
-  try { r = await fetch(url(c, x ? '/stt' : '/audio/transcriptions'), { method: 'POST', headers: { Authorization: `Bearer ${c.key}` }, body: f }) }
-  catch { throw new Error('네트워크 오류: 인터넷 연결 또는 Base URL을 확인하세요.') }
+  try { r = await fetch(url(c, x ? '/stt' : '/audio/transcriptions'), { method: 'POST', headers: { Authorization: `Bearer ${c.key}` }, body: f, signal }) }
+  catch (e) { throw netErr(e, signal) }
   if (!r.ok) throw await err(r)
   return ((await r.json()).text as string || '').trim()
 }
-export async function apiMemo(c: Cfg, transcript: string, extra: string) {
+export async function apiMemo(c: Cfg, transcript: string, extra: string, signal?: AbortSignal) {
   let r: Response
   try {
     r = await fetch(url(c, '/chat/completions'), {
       method: 'POST', headers: { Authorization: `Bearer ${c.key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: c.chatModel || 'gpt-4o-mini', ...(isXai(c) ? {} : { temperature: 0.2 }), messages: [
+      body: JSON.stringify({ model: c.chatModel || 'gpt-4o-mini', ...(isXai(c) ? (/grok-4\.[5-9]/.test(c.chatModel) ? { reasoning_effort: 'low' } : {}) : { temperature: 0.2 }), stream: false, messages: [
         { role: 'system', content: SYSTEM_PROMPT + (extra.trim() ? '\n\n추가 지시:\n' + extra : '') },
-        { role: 'user', content: '다음 상담 녹취록으로 진료메모를 작성해줘:\n\n' + transcript }] })
+        { role: 'user', content: '다음 상담 녹취록으로 진료메모를 작성해줘:\n\n' + transcript }] }), signal
     })
-  } catch { throw new Error('네트워크 오류: 인터넷 연결 또는 Base URL을 확인하세요.') }
+  } catch (e) { throw netErr(e, signal) }
   if (!r.ok) throw await err(r)
-  let t: string = (await r.json()).choices?.[0]?.message?.content || ''
+  let j: any; try { j = await r.json() } catch { throw new Error(`응답을 해석할 수 없습니다 (HTTP ${r.status}).`) }
+  const ct = j?.choices?.[0]?.message?.content
+  let t: string = typeof ct === 'string' ? ct : Array.isArray(ct) ? ct.map((x: any) => x?.text || '').join('') : (j?.output_text || '')
+  if (!t.trim()) throw new Error('모델이 빈 응답을 보냈습니다. 다시 시도하거나 모델을 바꿔 보세요. (finish_reason: ' + (j?.choices?.[0]?.finish_reason || '알 수 없음') + ')')
   t = t.replace(/^```\w*\n?|```$/gm, '').trim()
   if (!t.startsWith('[대화내용요약]')) t = DISCLAIMER + '\n\n' + t
   return t
