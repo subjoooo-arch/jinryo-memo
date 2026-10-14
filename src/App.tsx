@@ -121,7 +121,7 @@ export default function App() {
       </section>
       <section className="card">
         <div className="hd"><h2>3. 진료메모</h2><button className="cp" onClick={() => cp(memo, '진료메모')}>📋 복사</button></div>
-        <textarea className="memo" value={memo} onChange={e => setMemo(e.target.value)} rows={16} placeholder="생성된 진료메모 (dNote에 붙여넣기)" />
+        <textarea className="memo" value={memo} onChange={e => setMemo(e.target.value)} rows={16} placeholder="생성된 진료메모" />
         <button className="big pri wide" onClick={() => cp(memo, '진료메모')}>📋 진료메모 복사</button>
       </section>
     </main>}
