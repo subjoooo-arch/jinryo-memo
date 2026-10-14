@@ -1,0 +1,19 @@
+:root{color-scheme:light dark;--bg:#f1f5f9;--card:#fff;--fg:#0f172a;--mu:#64748b;--bd:#cbd5e1;--pri:#2563eb}
+@media (prefers-color-scheme:dark){:root{--bg:#0f172a;--card:#1e293b;--fg:#e2e8f0;--mu:#94a3b8;--bd:#334155}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.5 system-ui,'Noto Sans KR',sans-serif}
+.app{max-width:1000px;margin:auto;padding:12px}header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+h1{margin:4px 0;font-size:26px}h2{margin:0 0 10px;font-size:20px}nav{display:flex;gap:6px}
+button,.big{font:inherit;border-radius:12px;border:1px solid var(--bd);background:var(--card);color:var(--fg);cursor:pointer;min-height:52px;padding:0 18px}
+nav button.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:16px;margin:12px 0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0}.big{display:inline-flex;align-items:center;justify-content:center;min-height:64px;font-size:20px;font-weight:600}
+.rec{background:#dc2626;color:#fff;border:0}.stop{background:#7f1d1d;color:#fff;border:0;animation:p 1.2s infinite}.pri{background:var(--pri);color:#fff;border:0}.wide{width:100%;margin-top:10px}
+.live{outline:3px solid #dc2626}button:disabled{opacity:.5}@keyframes p{50%{opacity:.7}}
+textarea,input,select{width:100%;font:inherit;font-size:17px;padding:12px;border-radius:12px;border:1px solid var(--bd);background:var(--bg);color:var(--fg)}
+.memo{font-family:ui-monospace,'D2Coding',monospace;font-size:16px}.hd{display:flex;justify-content:space-between;align-items:center}.cp{min-height:48px}
+.fld{display:block;margin:12px 0;color:var(--mu)}.fld input,.fld textarea,.fld select{margin-top:4px;color:var(--fg)}
+.tip{color:var(--mu);font-size:15px}.msg{background:#7f1d1d;color:#fff;padding:12px 16px;border-radius:12px;margin:8px 0}
+.busy{display:flex;gap:10px;align-items:center;padding:12px;background:var(--card);border-radius:12px;margin:8px 0}
+.spin{width:20px;height:20px;border:3px solid var(--bd);border-top-color:var(--pri);border-radius:50%;animation:s 1s linear infinite}@keyframes s{to{transform:rotate(1turn)}}
+audio{flex:1;min-width:260px}pre{white-space:pre-wrap;font-size:14px;color:var(--mu);margin:0}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#16a34a;color:#fff;padding:14px 24px;border-radius:999px;font-weight:600}
